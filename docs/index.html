@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>{timeseriesdb} 1.0</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Matthias Bannert (@whatsgoodio) and Severin Thöni" />
+    <meta name="date" content="2020-12-02" />
+    <link href="libs/remark-css-0.0.1/robot-fonts.css" rel="stylesheet" />
+    <link rel="stylesheet" href="more.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# {timeseriesdb} 1.0
+## A Time Series Database for Official Statistics
+### Matthias Bannert (<span class="citation">@whatsgoodio</span>) and Severin Thöni
+### KOF, ETH Zurich
+### 2020-12-02
+
+---
+
+
+&lt;/br&gt;
+&lt;/br&gt;
+&lt;/br&gt;
+&lt;/br&gt;
+
+
+## Connect to PostgreSQL
+
+
+```r
+library(timeseriesdb)
+# otherwise use Postgres defaults
+con &lt;- db_connection_create(dbname = "mydb",
+                            host = "localhost",
+                            passwd = ".pgpass",
+                            passwd_from_file = TRUE)
+```
+
+
+
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+
+# 1. Consistent Storage of Time Series
+
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+
+&lt;img src="excel1.jpg"&gt;
+
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+
+&lt;img src="excel2.jpg"&gt;
+
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+
+&lt;img src="excel3.jpg"&gt;
+
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+
+&lt;img src="excel4.jpg"&gt;
+
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## Store Time Series to the Database
+
+
+.pull-left[
+
+
+```r
+library(timeseriesdb)
+
+lots &lt;- list(ts1 = ts(rnorm(100),
+                      start = c(1990,1),
+                      freq = 4),
+             ts2 = ts(rnorm(135),
+                      start = c(1994,3),
+                      freq = 12)
+
+db_ts_store(con, lots)
+```
+
+
+]
+
+
+.pull-right[
+
+### Basic Store Process
+
+- list of time series
+- unique identifiers = element names
+
+
+### Advantages Over File Based Storage
+
+- no redundant keys across files
+- constraints are easy to implement 
+
+
+]
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+
+# 2. Vintages (Versioning for Time Series)
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## KOF Tourism Forecast
+
+
+
+```r
+prev &lt;- db_ts_read(con,
+                   ts_keys = "ch.kof.trsm.fcst.ws.l.all.ch.lg",
+*                  valid_on = "2020-10-20")
+tstools::tsplot(
+  list(
+  "previous tourism forecast" = 
+    prev$ch.kof.trsm.fcst.ws.l.all.ch.lg
+    ), manual_value_ticks_l = c(10000,12000,14000,16000,18000),
+  theme = uros)
+```
+
+![](index_files/figure-html/unnamed-chunk-4-1.png)&lt;!-- --&gt;
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## KOF Tourism Forecast
+
+
+
+```r
+*curr &lt;- db_ts_read(con,
+*                  ts_keys = "ch.kof.trsm.fcst.ws.l.all.ch.lg")
+tstools::tsplot(
+  list(
+  "previous tourism forecast" = 
+    prev$ch.kof.trsm.fcst.ws.l.all.ch.lg,
+  "current tourism forecast" = 
+    curr$ch.kof.trsm.fcst.ws.l.all.ch.lg
+), manual_value_ticks_l = c(10000,12000,14000,16000,18000),
+theme = uros)
+```
+
+![](index_files/figure-html/unnamed-chunk-5-1.png)&lt;!-- --&gt;
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+class: center, middle
+
+
+# 3. Multi-Language Meta Information
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Comprehensive Multi-Lingual Meta Information
+
+
+
+```r
+db_metadata_read(
+  con,
+  "ch.kof.inu.ng08.fx.sector_4d.2652.q_ql_ass_bs.balance",
+  locale = "de",
+  valid_on = Sys.Date())
+```
+
+```
+## Object of class tsmeta
+## $ch.kof.inu.ng08.fx.sector_4d.2652.q_ql_ass_bs.balance
+## Object of class meta
+## sa           : Original
+## item         : Saldo (in %)
+## noga         : Noga 2008
+## level        : Noga 4-Steller 2652
+## region       : Gesamtschweiz
+## survey       : Umfrage Industrie
+## country      : Schweiz
+## provider     : KOF Konjunkturforschungsstelle
+## variable     : Geschäftslage, Urteil
+## bootstrap    : keines
+## frequency    : Gesamtzeitraum
+## level_ext    : Noga 4-Steller 2652 (Herstellung von Uhren)
+## variable_type: qualitative Frage mit 3-er Skala
+```
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## Comprehensive Multi-Lingual Meta Information
+
+
+
+```r
+db_metadata_read(
+  con,
+  "ch.kof.inu.ng08.fx.sector_4d.2652.q_ql_ass_bs.balance",
+  locale = "fr",
+  valid_on = Sys.Date())
+```
+
+```
+## Object of class tsmeta
+## $ch.kof.inu.ng08.fx.sector_4d.2652.q_ql_ass_bs.balance
+## Object of class meta
+## sa           : original
+## item         : solde (en %)
+## noga         : noga 2008
+## level        : noga code à 4 digits 2652
+## region       : Suisse
+## survey       : enquête industrie
+## country      : suisse
+## provider     : KOF Centre de recherches conjoncturelles
+## variable     : marche des affaires, résultat
+## bootstrap    : aucun
+## frequency    : période totale
+## level_ext    : noga code à 4 digits 2652 (Horlogerie)
+## variable_type: question qualitative avec échelle à 3 points
+```
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## Comprehensive Multi-Lingual Meta Information
+
+
+```r
+db_metadata_read(
+  con,
+  "ch.kof.inu.ng08.fx.sector_4d.2652.q_ql_ass_bs.balance",
+  locale = "en",
+  valid_on = Sys.Date())
+```
+
+```
+## Object of class tsmeta
+## $ch.kof.inu.ng08.fx.sector_4d.2652.q_ql_ass_bs.balance
+## Object of class meta
+## sa           : original
+## item         : balance (in %)
+## noga         : noga 2008
+## level        : noga 4-digits code 2652
+## region       : Switzerland
+## survey       : manufacturing survey
+## country      : Switzerland
+## provider     : KOF Swiss Economic Institute
+## variable     : business situation, assessment
+## bootstrap    : none
+## frequency    : total period
+## level_ext    : noga 4-digits code 2652 (Manufacture of watches and clocks)
+## variable_type: qualitative question with 3-point scale
+```
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+class: center, middle
+
+
+# How Does {timeseriesdb} Work ?
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+class:center,middle
+
+## R and PostgreSQL
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center,middle
+
+&lt;img src="timeseriesdb_1_0.png" width="700px"&gt;
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+
+class: center,middle
+
+&lt;img src="timeseriesdb_1_0_red.png" width="700px"&gt;
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+class: center,middle
+
+&lt;img src="tsdb1.jpg" width="500px"&gt;
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center,middle
+
+&lt;img src="tsdb2.jpg" width="500px"&gt;
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center,middle
+
+&lt;img src="tsdb3.jpg" width="500px"&gt;
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center,middle
+
+&lt;img src="tsdb4.jpg" width="500px"&gt;
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+class: center,middle
+
+&lt;img src="tsdb5.jpg" width="500px"&gt;
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+## {timeseriesdb} Functions: Time Series Level
+
+
+
+```r
+*db_ts_read(con, vector_of_keys)
+*db_ts_store(con, list_of_time_series)
+db_ts_find_keys(con, regular_expression)
+db_ts_get_last_update(con, vector_of_keys)
+db_ts_read_history(con, time_series_key)
+...
+```
+
+
+```r
+db_ts_read(con,"ch.kof.dlu.ng08.fx.q_ql_ass_bs.balance")
+```
+
+```
+## $ch.kof.dlu.ng08.fx.q_ql_ass_bs.balance
+##        Qtr1   Qtr2   Qtr3   Qtr4
+## 2006                       55.62
+## 2007  59.54  60.87  63.55  64.43
+## 2008  64.75  60.42  54.87  49.97
+## 2009  37.77  25.59  23.74  29.06
+## 2010  28.00  39.55  38.74  47.74
+## 2011  50.67  51.05  49.85  42.20
+## 2012  41.17  38.74  38.08  36.86
+## 2013  37.41  35.74  34.51  35.55
+## 2014  35.69  36.78  37.84  33.13
+## 2015  37.75  31.55  26.84  24.31
+## 2016  25.45  22.55  24.27  24.97
+## 2017  26.78  33.70  33.66  23.21
+## 2018  25.78  28.20  28.09  27.13
+## 2019  25.89  25.16  30.23  27.03
+## 2020  28.00 -34.84 -17.63   1.17
+## 
+## attr(,"class")
+## [1] "tslist" "list"
+```
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## {timeseriesdb} Functions: Time Series Level
+
+
+
+```r
+db_ts_read(con, vector_of_keys) 
+db_ts_store(con, list_of_time_series) 
+*db_ts_find_keys(con, regular_expression)
+db_ts_get_last_update(con, vector_of_keys)
+db_ts_read_history(con, time_series_key)
+...
+```
+
+
+```r
+db_ts_find_keys(con, "ch.kof.ie")
+```
+
+```
+##                                 ts_key
+##   1:              ch.kof.ie.ch_aiu.ass
+##   2:          ch.kof.ie.ch_aiu.ass.d11
+##   3:              ch.kof.ie.ch_aiu.exp
+##   4:          ch.kof.ie.ch_aiu.exp.d11
+##   5:              ch.kof.ie.ch_aiu.ind
+##   6:          ch.kof.ie.ch_aiu.ind.d11
+##   7:              ch.kof.ie.ch_bau.ass
+##   8:          ch.kof.ie.ch_bau.ass.d11
+##   9:              ch.kof.ie.ch_bau.exp
+##  10:          ch.kof.ie.ch_bau.exp.d11
+##  11:              ch.kof.ie.ch_bau.ind
+##  12:          ch.kof.ie.ch_bau.ind.d11
+##  13:              ch.kof.ie.ch_dhu.ass
+##  14:          ch.kof.ie.ch_dhu.ass.d11
+##  15:              ch.kof.ie.ch_dhu.exp
+##  16:          ch.kof.ie.ch_dhu.exp.d11
+##  17:              ch.kof.ie.ch_dhu.ind
+##  18:          ch.kof.ie.ch_dhu.ind.d11
+##  19:              ch.kof.ie.ch_dlu.ass
+##  20:          ch.kof.ie.ch_dlu.ass.d11
+##  21:              ch.kof.ie.ch_dlu.exp
+##  22:          ch.kof.ie.ch_dlu.exp.d11
+##  23:              ch.kof.ie.ch_dlu.ind
+##  24:          ch.kof.ie.ch_dlu.ind.d11
+##  25:            ch.kof.ie.ch_fvu_b.ass
+##  26:        ch.kof.ie.ch_fvu_b.ass.d11
+##  27:            ch.kof.ie.ch_fvu_b.exp
+##  28:        ch.kof.ie.ch_fvu_b.exp.d11
+##  29:            ch.kof.ie.ch_fvu_b.ind
+##  30:        ch.kof.ie.ch_fvu_b.ind.d11
+##  31:            ch.kof.ie.ch_fvu_v.ass
+##  32:        ch.kof.ie.ch_fvu_v.ass.d11
+##  33:            ch.kof.ie.ch_fvu_v.exp
+##  34:        ch.kof.ie.ch_fvu_v.exp.d11
+##  35:            ch.kof.ie.ch_fvu_v.ind
+##  36:        ch.kof.ie.ch_fvu_v.ind.d11
+##  37:              ch.kof.ie.ch_ggu.ass
+##  38:          ch.kof.ie.ch_ggu.ass.d11
+##  39:              ch.kof.ie.ch_ggu.exp
+##  40:          ch.kof.ie.ch_ggu.exp.d11
+##  41:              ch.kof.ie.ch_ggu.ind
+##  42:          ch.kof.ie.ch_ggu.ind.d11
+##  43:              ch.kof.ie.ch_ghu.ass
+##  44:          ch.kof.ie.ch_ghu.ass.d11
+##  45:              ch.kof.ie.ch_ghu.exp
+##  46:          ch.kof.ie.ch_ghu.exp.d11
+##  47:              ch.kof.ie.ch_ghu.ind
+##  48:          ch.kof.ie.ch_ghu.ind.d11
+##  49:              ch.kof.ie.ch_inu.ass
+##  50:          ch.kof.ie.ch_inu.ass.d11
+##  51:              ch.kof.ie.ch_inu.exp
+##  52:          ch.kof.ie.ch_inu.exp.d11
+##  53:              ch.kof.ie.ch_inu.ind
+##  54:          ch.kof.ie.ch_inu.ind.d11
+##  55:            ch.kof.ie.ch_total.ass
+##  56:        ch.kof.ie.ch_total.ass.d11
+##  57:            ch.kof.ie.ch_total.exp
+##  58:        ch.kof.ie.ch_total.exp.d11
+##  59:            ch.kof.ie.ch_total.ind
+##  60:        ch.kof.ie.ch_total.ind.d11
+##  61:       ch.kof.ie_legacy.ch_aiu.ass
+##  62:       ch.kof.ie_legacy.ch_aiu.exp
+##  63:       ch.kof.ie_legacy.ch_aiu.ind
+##  64:       ch.kof.ie_legacy.ch_bau.ass
+##  65:       ch.kof.ie_legacy.ch_bau.exp
+##  66:       ch.kof.ie_legacy.ch_bau.ind
+##  67:       ch.kof.ie_legacy.ch_dhu.ass
+##  68:       ch.kof.ie_legacy.ch_dhu.exp
+##  69:       ch.kof.ie_legacy.ch_dhu.ind
+##  70:       ch.kof.ie_legacy.ch_dlu.ass
+##  71:       ch.kof.ie_legacy.ch_dlu.exp
+##  72:       ch.kof.ie_legacy.ch_dlu.ind
+##  73:     ch.kof.ie_legacy.ch_fvu_b.ass
+##  74:     ch.kof.ie_legacy.ch_fvu_b.exp
+##  75:     ch.kof.ie_legacy.ch_fvu_b.ind
+##  76:     ch.kof.ie_legacy.ch_fvu_v.ass
+##  77:     ch.kof.ie_legacy.ch_fvu_v.exp
+##  78:     ch.kof.ie_legacy.ch_fvu_v.ind
+##  79:       ch.kof.ie_legacy.ch_ggu.ass
+##  80:       ch.kof.ie_legacy.ch_ggu.exp
+##  81:       ch.kof.ie_legacy.ch_ggu.ind
+##  82:       ch.kof.ie_legacy.ch_ghu.ass
+##  83:       ch.kof.ie_legacy.ch_ghu.exp
+##  84:       ch.kof.ie_legacy.ch_ghu.ind
+##  85:       ch.kof.ie_legacy.ch_inu.ass
+##  86:       ch.kof.ie_legacy.ch_inu.exp
+##  87:       ch.kof.ie_legacy.ch_inu.ind
+##  88:     ch.kof.ie_legacy.ch_total.ass
+##  89:     ch.kof.ie_legacy.ch_total.exp
+##  90:     ch.kof.ie_legacy.ch_total.ind
+##  91:      ch.kof.ie.retro.ch_total.ass
+##  92:  ch.kof.ie.retro.ch_total.ass.d11
+##  93:      ch.kof.ie.retro.ch_total.exp
+##  94:  ch.kof.ie.retro.ch_total.exp.d11
+##  95:      ch.kof.ie.retro.ch_total.ind
+##  96:  ch.kof.ie.retro.ch_total.ind.d11
+##  97:  ch.kof.ie.retro.ge_total.ass.d11
+##  98:  ch.kof.ie.retro.ge_total.exp.d11
+##  99: ch.kof.ie.retro.ge_total.ind2.d11
+## 100:  ch.kof.ie.retro.ge_total.ind.d11
+##                                 ts_key
+```
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## {timeseriesdb} Functions: Time Series Level
+
+
+
+```r
+db_ts_read(con, vector_of_keys) 
+db_ts_store(con, list_of_time_series) 
+db_ts_find_keys(con, regular_expression)
+db_ts_get_last_update(con, vector_of_keys)
+*db_ts_read_history(con, time_series_key)
+...
+```
+
+
+```r
+tsl &lt;- db_ts_read_history(con, "ch.kof.barometer")
+names(tsl)
+```
+
+```
+##  [1] "20141001" "20141101" "20141201" "20150101" "20150201" "20150301"
+##  [7] "20150401" "20150501" "20150601" "20150701" "20150801" "20150901"
+## [13] "20151001" "20151101" "20151201" "20160101" "20160201" "20160301"
+## [19] "20160401" "20160501" "20160601" "20160701" "20160801" "20160901"
+## [25] "20161001" "20161101" "20161201" "20170101" "20170201" "20170301"
+## [31] "20170401" "20170501" "20170601" "20170701" "20170801" "20170901"
+## [37] "20171001" "20171101" "20171201" "20180101" "20180201" "20180301"
+## [43] "20180401" "20180501" "20180601" "20180701" "20180801" "20180901"
+## [49] "20181001" "20181101" "20181201" "20190101" "20190201" "20190301"
+## [55] "20190401" "20190501" "20190601" "20190701" "20190801" "20190901"
+## [61] "20191001" "20191101" "20191201" "20200101" "20200201" "20200301"
+## [67] "20200401" "20200501" "20200601" "20200701" "20200801" "20200901"
+## [73] "20201001"
+```
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## {timeseriesdb} Functions: Dataset Level
+
+
+```r
+db_dataset_create(con,
+                  set_name = ,
+                  set_description = ,
+                  set_md = )
+
+db_dataset_get_keys(con, set_name = )
+
+db_dataset_get_next_release(con, vector_of_set_ids)
+```
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+## {timeseriesdb} Functions: Dataset Level
+
+
+```r
+db_dataset_create(con,
+                  set_name = ,
+                  set_description = ,
+                  set_md = )
+
+db_dataset_get_keys(con, set_name = )
+
+db_dataset_get_next_release(con, vector_of_set_ids)
+```
+
+## {timeseriesdb} Functions: Collections
+
+
+```r
+db_collection_add_ts(con,
+                     collection_name = ,
+                     ts_keys = ,
+                     description = ,
+                     user = )
+```
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## {timeseriesdb} Functions: Access Management
+
+
+.pull-left[
+
+
+```r
+db_access_level_create(con, "access_level_name")
+db_access_level_delete(con, "access_level_name")
+db_access_level_list(con)
+db_access_level_set_default(con, access_level)
+
+db_ts_store(con,
+            list_of_time_series,
+*           access = "access_level_name")
+
+db_ts_change_access(con,
+                    ts_keys = ,
+*                   new_access_level = )
+```
+
+]
+
+.pull-right[
+
+- Time Series Version Level Access Management
+- PostgreSQL: Row Level Security
+
+]
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## {timeseriesdb} Functions: Meta Description
+
+
+.pull-left[
+
+
+```r
+db_metadata_read(con = ,
+                 valid_on = ,
+                 ts_keys = ,
+                 regex = ,
+                 locale = )
+db_metadata_store(con, metadata = )
+db_meta_get_latest_validity(con, ts_keys = )
+```
+
+
+]
+
+.pull-right[
+
+- Time Series Level
+- Vintage Level
+- Dataset Level
+- Multi-Lingual
+
+]
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+# [mbannert.github.io/timeseriesdb](https://mbannert.github.io/timeseriesdb)
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+class: center, middle
+
+
+# How To Get Started?
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## If PostgreSQL is installed... 
+
+
+.pull-left[
+
+## PostgreSQL
+
+- dedicated schema
+- install PG extensions *uuid-ossp* and *btree_gist*
+- create schema admins
+
+(see [installation guide](https://mbannert.github.io/timeseriesdb/articles/installation_guide.html))
+
+]
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## If PostgreSQL is installed... 
+
+
+.pull-left[
+
+## PostgreSQL
+
+- dedicated schema
+- install PG extensions *uuid-ossp* and *btree_gist*
+- create schema admins
+
+(see [installation guide](https://mbannert.github.io/timeseriesdb/articles/installation_guide.html))
+
+]
+
+.pull-right[
+
+## R
+
+
+&lt;img src="will.png" height="350px"&gt;
+
+
+
+
+]
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+## If PostgreSQL is installed... 
+
+
+.pull-left[
+
+## PostgreSQL
+
+- dedicated schema
+- install PG extensions *uuid-ossp* and *btree_gist*
+- create schema admins
+
+(see [installation guide](https://mbannert.github.io/timeseriesdb/articles/installation_guide.html))
+
+]
+
+.pull-right[
+
+## R
+
+
+```r
+install_timeseriesdb(con,
+                     install_tables = TRUE,
+                     install_functions = TRUE,
+                     schema = "tsdb_playground")
+```
+
+
+
+]
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+
+
+
+class:center,middle
+
+## [./start_dev_docker.sh](https://github.com/mbannert/timeseriesdb/blob/v1/inst/start_dev_docker.sh)
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Summary: Why Test {timeseriesdb} ? 
+
+- Easy to try out
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Summary: Why Test {timeseriesdb} ? 
+
+- Easy to try out
+- You can grow into it
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Summary: Why Test {timeseriesdb} ? 
+
+- Easy to try out
+- You can grow into it
+- Production tested in economic statistics since 2012
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Summary: Why Test {timeseriesdb} ? 
+
+- Easy to try out
+- You can grow into it
+- Production tested in economic statistics since 2012
+- light weight, license cost free
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Summary: Why Test {timeseriesdb} ? 
+
+- Easy to try out
+- You can grow into it
+- Production tested in economic statistics since 2012
+- light weight, license cost free
+- documentation
+
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Summary: Why Test {timeseriesdb} ? 
+
+- Easy to try out
+- You can grow into it
+- Production tested in economic statistics since 2012
+- light weight, license cost free
+- documentation
+- API ready, language agnostic logic
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+class:center,middle
+
+## An Application Beyond R
+
+[https://kof.ethz.ch/prognosen-indikatoren/indikatoren/kof-konjunkturbarometer.html](https://kof.ethz.ch/prognosen-indikatoren/indikatoren/kof-konjunkturbarometer.html)
+
+(uses KOF Datenservice REST API)
+
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+---
+
+## Resources
+
+- Documentation (pkgdown): https://mbannert.github.io/timeseriesdb/
+- Development: https://github.com/mbannert/timeseriesdb/tree/v1
+- CRAN: https://cran.r-project.org/package=timeseriesdb
+
+
+&gt;Note: timeseriesdb 1.0 is not on CRAN yet, the CRAN version is outdated. Use the v1 branch on github.com/timeseriesdb if you want to test the water. 
+
+&lt;div class="my-footer"&gt;&lt;span&gt;&lt;div class="footer-text" align="right"&gt;These slides and video presentation by Dr. Matthias Bannert are licensed under &lt;a href="https://creativecommons.org/licenses/by-nc-sa/4.0/?ref=chooser-v1"&gt;CC BY-NC-SA 4.0&lt;/a&gt;&lt;/div&gt;&lt;/span&gt;&lt;/div&gt;
+
+
+
+
+
+## Feedback Welcome! 
+
+- Issue Tracker: https://github.com/mbannert/timeseriesdb/issues
+- Twitter: https://twitter.com/whatsgoodio
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script src="https://platform.twitter.com/widgets.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false,
+"ratio": "16:9"
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
